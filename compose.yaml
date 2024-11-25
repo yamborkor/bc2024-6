@@ -13,7 +13,10 @@ services:
       context: .
     environment:
       NODE_ENV: production
+    volumes: 
+      - ./:/usr/src/app
     ports:
+      - 9229:9229
       - 3000:3000
 
 # The commented out section below is an example of how to define a PostgreSQL
