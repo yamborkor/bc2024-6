@@ -3,6 +3,8 @@ const { Command } = require("commander");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const swaggerJsdoc = require("swagger-jsdoc");
+const swaggerUi = require("swagger-ui-express");
 
 const program = new Command();
 program
@@ -24,6 +26,48 @@ if (!fs.existsSync(cacheDir)) {
   fs.mkdirSync(cacheDir);
 }
 
+// Swagger configuration
+const swaggerDefinition = {
+  openapi: "3.0.0",
+  info: {
+    title: "Notes Service API",
+    version: "1.0.0",
+    description: "API для роботи з текстовими нотатками",
+  },
+  servers: [
+    {
+      url: `http://${options.host}:${options.port}`,
+      description: "Local server",
+    },
+  ],
+};
+
+const swaggerOptions = {
+  swaggerDefinition,
+  apis: [__filename],
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @swagger
+ * /notes/{name}:
+ *   get:
+ *     summary: Отримати нотатку за ім'ям
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         description: Ім'я нотатки
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Успішне отримання нотатки
+ *       404:
+ *         description: Нотатка не знайдена
+ */
 app.get("/notes/:name", (req, res) => {
   const notePath = path.join(cacheDir, `${req.params.name}.txt`);
   if (!fs.existsSync(notePath)) {
@@ -33,6 +77,33 @@ app.get("/notes/:name", (req, res) => {
   res.send(noteText);
 });
 
+/**
+ * @swagger
+ * /notes/{name}:
+ *   put:
+ *     summary: Оновити текст існуючої нотатки
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         description: Ім'я нотатки
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               text:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Нотатка успішно оновлена
+ *       404:
+ *         description: Нотатка не знайдена
+ */
 app.put("/notes/:name", (req, res) => {
   const notePath = path.join(cacheDir, `${req.params.name}.txt`);
   if (!fs.existsSync(notePath)) {
@@ -42,6 +113,24 @@ app.put("/notes/:name", (req, res) => {
   res.sendStatus(200);
 });
 
+/**
+ * @swagger
+ * /notes/{name}:
+ *   delete:
+ *     summary: Видалити нотатку за ім'ям
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         description: Ім'я нотатки
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Нотатка успішно видалена
+ *       404:
+ *         description: Нотатка не знайдена
+ */
 app.delete("/notes/:name", (req, res) => {
   const notePath = path.join(cacheDir, `${req.params.name}.txt`);
   if (!fs.existsSync(notePath)) {
@@ -51,6 +140,26 @@ app.delete("/notes/:name", (req, res) => {
   res.sendStatus(200);
 });
 
+/**
+ * @swagger
+ * /notes:
+ *   get:
+ *     summary: Отримати список усіх нотаток
+ *     responses:
+ *       200:
+ *         description: Успішне отримання списку нотаток
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   text:
+ *                     type: string
+ */
 app.get("/notes", (req, res) => {
   const notes = fs.readdirSync(cacheDir).map((filename) => {
     const noteName = path.parse(filename).name;
@@ -60,10 +169,33 @@ app.get("/notes", (req, res) => {
   res.status(200).json(notes);
 });
 
+/**
+ * @swagger
+ * /write:
+ *   post:
+ *     summary: Додати нову нотатку
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note_name:
+ *                 type: string
+ *                 description: Ім'я нотатки
+ *               note:
+ *                 type: string
+ *                 description: Текст нотатки
+ *     responses:
+ *       201:
+ *         description: Нотатка успішно створена
+ *       400:
+ *         description: Неправильний запит або нотатка вже існує
+ */
 app.post("/write", upload.none(), (req, res) => {
   const { note_name, note } = req.body;
 
-  // Validate inputs
   if (!note_name || !note) {
     return res.status(400).send("Missing required fields: note_name or note");
   }
@@ -75,23 +207,6 @@ app.post("/write", upload.none(), (req, res) => {
 
   fs.writeFileSync(notePath, note);
   res.sendStatus(201);
-});
-
-app.get("/UploadForm.html", (req, res) => {
-  const formHtml = `
-    <html>
-    <body>
-      <h2>Upload Form</h2>
-      <form method="post" action="/write" enctype="multipart/form-data">
-        <label for="note_name_input">Note Name:</label><br>
-        <input type="text" id="note_name_input" name="note_name"><br><br>
-        <label for="note_input">Note:</label><br>
-        <textarea id="note_input" name="note" rows="4" cols="50"></textarea><br><br>
-        <button type="submit">Upload</button>
-      </form>
-    </body>
-    </html>`;
-  res.status(200).send(formHtml);
 });
 
 const server = app.listen(options.port, options.host, () => {
